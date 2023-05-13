@@ -154,14 +154,6 @@ res=read_(1,21,2)#测量距离得到的结果要除10000
 print("dis:",int(res)/10000)
 
 
-
-
-# flag,ret_data = send_cmd(1,3,16,1,500)
-
-# ret_data=send_cmd(1,3,21,2,1000)
-
-
-
 # cmd = modbus_cmd(1,6,16,1)
 # print("cmd",cmd)
 # uart.write(str2hex(cmd))
