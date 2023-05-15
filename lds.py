@@ -85,14 +85,15 @@ def send_cmd(addr,func,start_addr,data,distance,timeout=5):
     while True:
         start_time = time.time() 
         #清除发送缓冲区和接收缓冲区
+        if(timeout<=0):
+            break
         uart.write(b'')
         uart.read(uart.any())
         #发送命令
         uart.write(str2hex(cmd))
         print("cmd",cmd)
         utime.sleep(phy_time)
-        if(timeout==0):
-            break
+        
         if uart.any():
             data = uart.read()
             # print("data:",data)
