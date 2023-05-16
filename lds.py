@@ -1,6 +1,8 @@
 from machine import Pin, UART
 import utime
 import time
+import uasyncio as asyncio
+
 
 def modbus_cmd(addr, func, start_addr, data):
     # 将地址转换为16进制bytes
@@ -57,67 +59,81 @@ def str2hex(data):
     data = bytes.fromhex(data)
     return data
  
-#判断接收的报文data是否正确，返回ret_data
-def rev(data,cmd):
-    # print("rev",hex2str(data))#data是hex格式
-    cmd=str2hex(cmd)
-    #crc校验错误返回1
-    crc = crc16(data[:-2])
-    if(crc!=data[-2:]):
-        return 1,""
-    #报文出错：cmd+128
-    if(data[1:2]!=cmd[1:2]):
-        return 2,""
-    #数据部分的错误只能在设备处理数据时判断
+class modbusDevise:
+    def __init__(self,baudrate,addr,func,start_addr,data,distance,timeout) -> None:
+        self.uart = UART(0, baudrate, tx=Pin(0), rx=Pin(1), bits=8, parity=None, stop=1)
+        self.uart_lock = asyncio.Lock() 
+        self.addr=addr
+        self.func=func
+        self.start_addr=start_addr
+        self.data=data
+        self.distance=distance
+        self.timeout=timeout
 
-    flag=0 #正确返回0
-    return flag,hex2str(data[2:-2]) #剥离报文头尾
+    #判断接收的报文data是否正确，返回ret_data
+    def rev(self,data,cmd):
+        # print("rev",hex2str(data))#data是hex格式
+        cmd=str2hex(cmd)
+        #crc校验错误返回1
+        crc = crc16(data[:-2])
+        if(crc!=data[-2:]):
+            return 1,""
+        #报文出错：cmd+128
+        if(data[1:2]!=cmd[1:2]):
+            return 2,""
+        #数据部分的错误只能在设备处理数据时判断
 
-#计算传输距离下正常等待时间,单位：秒
-def calculate_time(distance):
-    return distance/1000+0.1
+        flag=0 #正确返回0
+        return flag,hex2str(data[2:-2]) #剥离报文头尾
 
-#addr从机地址，func功能码，start_addr寄存器地址, data数据，distance传输距离(米)，timeout等待超时
-def send_cmd(addr,func,start_addr,data,distance,timeout=5):
-    cmd=modbus_cmd(addr,func,start_addr,data)
-    phy_time=calculate_time(distance)
-    flag=-1 #错误标识
-    while True:
-        start_time = time.time() 
-        #清除发送缓冲区和接收缓冲区
-        if(timeout<=0):
-            break
-        uart.write(b'')
-        uart.read(uart.any())
+    #计算传输距离下正常等待时间,单位：秒
+    def calculate_time(self):
+        return self.distance/1000+0.1
+
+    async def uartSend(self,cmd,phyTime):
+        self.uart.write(b'')
+        self.uart.read(self.uart.any())
         #发送命令
-        uart.write(str2hex(cmd))
+        await self.uart_lock.acquire()
+        self.uart.write(str2hex(cmd))
         print("cmd",cmd)
-        utime.sleep(phy_time)
-        
-        if uart.any():
-            data = uart.read()
-            # print("data:",data)
-        flag,ret_data=rev(data,cmd)#判断报文是否正确
-        # print("flag=",flag,end=" ")
-        # print("ret_data=",ret_data)
-        if flag==0:
-            # print("rev",hex2str(data))
-            return flag,ret_data   #ret_data传回数据包部分
+        utime.sleep(phyTime)
+        if self.uart.any():
+            data = self.uart.read()
         else:
-            print("接收报文错误：%d"% flag) #接收报文错误，重发报文
-        end_time = time.time()  
-        timeout = timeout-(end_time - start_time)  # 计算函数执行时间
+            data=None
+        self.uart_lock.release()
+        return data
 
-    ret_data="回传报文错误:"+str(flag)
-    return flag,ret_data #发送失败，传回错误信息
+    #addr从机地址，func功能码，start_addr寄存器地址, data数据，distance传输距离(米)，timeout等待超时
+    def send_cmd(self):
+        cmd=modbus_cmd(self.addr,self.func,self.start_addr,self.data)
+        phyTime=self.calculate_time()
+        flag=-1 #错误标识
+        while True:
+            start_time = time.time() 
+            #清除发送缓冲区和接收缓冲区
+            if(self.timeout<=0):
+                break
+            retdata= await self.uartSend(cmd,phyTime)
+            flag,ret_data=self.rev(retdata,cmd) #判断报文是否正确
+            if flag==0:
+                return flag,ret_data   #ret_data传回数据包部分
+            else:
+                print("接收报文错误：%d"% flag) #接收报文错误，重发报文
+            end_time = time.time()  
+            self.timeout = self.timeout-(end_time - start_time)  # 计算函数执行时间
+
+        ret_data="回传报文错误:"+str(flag)
+        return flag,ret_data #发送失败，传回错误信息
 
 
-uart = UART(0, baudrate=9600, tx=Pin(0), rx=Pin(1), bits=8, parity=None, stop=1)
 
 
 def write_(addr,start_addr,data):
     #distance由addr决定
-    flag,ret_data = send_cmd(addr,6,start_addr,data,500)
+    md=modbusDevise(9600,addr,6,start_addr,data,500,5)
+    flag,ret_data = md.send_cmd()
     if  flag!=0:
         print(ret_data)
     else:
@@ -126,7 +142,8 @@ def write_(addr,start_addr,data):
 
 def read_(addr,start_addr,data):
     #distance由addr决定
-    flag,ret_data=send_cmd(addr,3,start_addr,data,500)
+    md=modbusDevise(9600,addr,3,start_addr,data,500,5)
+    flag,ret_data = md.send_cmd()
     if flag!=0:
         return ret_data
     else:
