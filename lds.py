@@ -1,8 +1,7 @@
-from machine import Pin, UART
-import utime
+from machine import Pin, UART,WDT
 import time
 import uasyncio as asyncio
-
+import gc
 
 def modbus_cmd(addr, func, start_addr, data):
     # 将地址转换为16进制bytes
@@ -97,7 +96,7 @@ class modbusDevise:
         await self.uart_lock.acquire()
         self.uart.write(str2hex(cmd))
         print("cmd",cmd)
-        utime.sleep(phyTime)
+        await asyncio.sleep(phyTime)
         if self.uart.any():
             data = self.uart.read()
         else:
@@ -106,7 +105,7 @@ class modbusDevise:
         return data
 
     #addr从机地址，func功能码，start_addr寄存器地址, data数据，distance传输距离(米)，timeout等待超时
-    def send_cmd(self):
+    async def send_cmd(self):
         cmd=modbus_cmd(self.addr,self.func,self.start_addr,self.data)
         phyTime=self.calculate_time()
         flag=-1 #错误标识
@@ -128,22 +127,20 @@ class modbusDevise:
         return flag,ret_data #发送失败，传回错误信息
 
 
-
-
-def write_(addr,start_addr,data):
+async def write_(addr,start_addr,data):
     #distance由addr决定
     md=modbusDevise(9600,addr,6,start_addr,data,500,5)
-    flag,ret_data = md.send_cmd()
+    flag,ret_data =await md.send_cmd()
     if  flag!=0:
         print(ret_data)
     else:
         #处理数据
         print("写寄存器成功")
 
-def read_(addr,start_addr,data):
+async def read_(addr,start_addr,data):
     #distance由addr决定
     md=modbusDevise(9600,addr,3,start_addr,data,500,5)
-    flag,ret_data = md.send_cmd()
+    flag,ret_data =await md.send_cmd()
     if flag!=0:
         return ret_data
     else:
@@ -158,18 +155,37 @@ def read_(addr,start_addr,data):
             for i in range(1,data_len+1):
                 result=result+ret_data[-i]*factor[i-1]
             # print("result=",result)
-            return result
         else:
-            return "回传报文错误：3"
+            print("回传报文错误：3")
+
+async def get_cjy_dis():
+    await write_(1,16,1)
+    res=await read_(1,16,1)
+    if res==1:
+        print("result:",res)
+        res=await read_(1,21,2)#测量距离得到的结果要除10000
+        print("dis:",int(res)/10000)
 
 
+async def main():
+    asyncio.create_task(get_cjy_dis())
+    while True:
+        await asyncio.sleep(2)
+        erha.feed()
+        gc.collect()
+        print("memery free:", gc.mem_free(), "memery alloc:", gc.mem_alloc())
+        
 
-write_(1,16,1)
-res=read_(1,16,1)
-print("result:",res)
+erha = WDT(timeout=5000)
+asyncio.run(main())
 
-res=read_(1,21,2)#测量距离得到的结果要除10000
-print("dis:",int(res)/10000)
+
+# write_(1,16,1)
+# res=read_(1,16,1)
+# print("result:",res)
+
+# res=read_(1,21,2)#测量距离得到的结果要除10000
+# print("dis:",int(res)/10000)
 
 
 # cmd = modbus_cmd(1,6,16,1)
