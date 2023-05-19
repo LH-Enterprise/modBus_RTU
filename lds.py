@@ -76,14 +76,23 @@ class modbusDevise:
         #crc校验错误返回1
         crc = crc16(data[:-2])
         if(crc!=data[-2:]):
-            return 1,""
-        #报文出错：cmd+128
+            return 1,"crc校验码错误"
+        #报文出错：cmd+128 返回2
         if(data[1:2]!=cmd[1:2]):
-            return 2,""
-        #数据部分的错误只能在设备处理数据时判断
-
-        flag=0 #正确返回0
-        return flag,hex2str(data[2:-2]) #剥离报文头尾
+            return 2,"报文出错cmd=cmd+128"
+        func=6
+        if data[1:2]==func.to_bytes(1, "little"): #写寄存器不需要返回result
+            flag=0
+            return flag,"写寄存器成功"
+        
+        ret_data=data[2:-2] #hex格式 #剥离报文头尾
+        # print("ret_data=",ret_data)
+        data_len=int(ret_data[0])
+        if len(ret_data)==data_len+1:    #判断数据格式是否正确
+            flag=0 #正确返回0
+            return flag,hex2str(ret_data) 
+        else:
+            return 3,"数据长度出错" #数据格式错误
 
     #计算传输距离下正常等待时间,单位：秒
     def calculate_time(self):
@@ -115,15 +124,17 @@ class modbusDevise:
             if(self.timeout<=0):
                 break
             retdata= await self.uartSend(cmd,phyTime)
-            flag,ret_data=self.rev(retdata,cmd) #判断报文是否正确
-            if flag==0:
-                return flag,ret_data   #ret_data传回数据包部分
+            if retdata==None:
+                flag=-1
             else:
-                print("接收报文错误：%d"% flag) #接收报文错误，重发报文
+                flag,result=self.rev(retdata,cmd) #判断报文是否正确
+            if flag==0:
+                return flag,result   #ret_data传回数据包部分
+            else:
+                print("接收报文错误：%d,%s"% flag,result) #接收报文错误，重发报文
             end_time = time.time()  
             self.timeout = self.timeout-(end_time - start_time)  # 计算函数执行时间
-
-        ret_data="回传报文错误:"+str(flag)
+        ret_data="回传报文错误:"+result
         return flag,ret_data #发送失败，传回错误信息
 
 
@@ -133,38 +144,43 @@ async def write_(addr,start_addr,data):
     flag,ret_data =await md.send_cmd()
     if  flag!=0:
         print(ret_data)
+        print("请检查设备...")
     else:
-        #处理数据
-        print("写寄存器成功")
+        print(ret_data)
 
 async def read_(addr,start_addr,data):
     #distance由addr决定
     md=modbusDevise(9600,addr,3,start_addr,data,500,5)
     flag,ret_data =await md.send_cmd()
     if flag!=0:
-        return ret_data
+        print(ret_data)
+        return None
     else:
         #处理数据---测距仪的处理方式
         ret_data=str2hex(ret_data)
-        data_len=int(ret_data[0])
-        if len(ret_data)==data_len+1:  #判断数据格式是否正确
-            factor=[1] #因子矩阵
-            result=0 #结果
-            for i in range(1,data_len):
-                factor.append(256*factor[i-1])
-            for i in range(1,data_len+1):
-                result=result+ret_data[-i]*factor[i-1]
-            # print("result=",result)
-        else:
-            print("回传报文错误：3")
+        data_len=int(ret_data[0])  
+        factor=[1] #因子矩阵
+        result=0 #结果
+        for i in range(1,data_len):
+            factor.append(256*factor[i-1])
+        for i in range(1,data_len+1):
+            result=result+ret_data[-i]*factor[i-1]
+        print("result=",result)
+        return result
+
 
 async def get_cjy_dis():
-    await write_(1,16,1)
     res=await read_(1,16,1)
     if res==1:
-        print("result:",res)
-        res=await read_(1,21,2)#测量距离得到的结果要除10000
+        res=await read_(1,21,2)   #测量距离得到的结果要除10000
         print("dis:",int(res)/10000)
+    elif res==0:
+        #是否要加互斥锁？
+        await write_(1,16,1)
+        res=await read_(1,21,2)   
+        print("dis:",int(res)/10000)
+    else:
+        print("error")    
 
 
 async def main():
@@ -177,7 +193,8 @@ async def main():
         
 
 erha = WDT(timeout=5000)
-asyncio.run(main())
+loop = asyncio.get_event_loop()
+loop.run_until_complete(main())
 
 
 # write_(1,16,1)
