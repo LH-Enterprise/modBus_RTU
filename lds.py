@@ -58,7 +58,14 @@ def crc16(data):
     return crc
 
 def hex2str(data):
-    
+    """hex编码的bytes字节流转换成str，更便于人阅读
+
+    Args:
+        data (bytes): 要转换的数据
+
+    Returns:
+        data(str):转换后的数据
+    """
     data = data.hex()
     data = data.upper()
     data = data.replace(" ", "")
@@ -69,6 +76,14 @@ def hex2str(data):
     data = data.replace(" ", "")
     return data
 def str2hex(data):
+    """str转换成hex编码的bytes字节流，机器只支持hex编码格式
+
+    Args:
+        data (str): 要转换的数据
+
+    Returns:
+        data(bytes):转换后的数据
+    """
     data = data.replace(" ", "")
     data = data.replace("0X", "")
     data = data.replace("0x", "")
@@ -78,6 +93,7 @@ def str2hex(data):
     data = bytes.fromhex(data)
     return data
  
+
 class modbusDevise:
     def __init__(self,baudrate,tx,rx,bits,parity,stop) -> None:
         self.uart = UART(0, baudrate, tx=Pin(tx), rx=Pin(rx), bits=bits, parity=parity, stop=stop)
@@ -85,6 +101,15 @@ class modbusDevise:
         
     #判断接收的报文data是否正确，返回ret_data
     def __rev(self,data,cmd):
+        """_summary_
+
+        Args:
+            data (_type_): _description_
+            cmd (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         # print("rev",hex2str(data))#data是hex格式
         cmd=str2hex(cmd)
         #crc校验错误返回1
@@ -110,11 +135,27 @@ class modbusDevise:
         flag=0
         return flag,"写寄存器成功"
 
-    #计算传输距离下正常等待时间,单位：秒
     def __calculate_time(self,distance):
+        """计算传输距离下正常等待时间
+
+        Args:
+            distance (int): 设备的物理距离
+
+        Returns:
+            int:时间，单位：秒
+        """
         return distance/1000+0.1
 
     async def __uartSend(self,cmd,phyTime):
+        """UART串口传输，发送报文与接收报文
+
+        Args:
+            cmd (str): 待发送命令
+            phyTime (int): 等待报文回传的时间
+
+        Returns:
+            data(bytes): 接收到的报文（hex编码格式）
+        """
         self.uart.write(b'')
         self.uart.read(self.uart.any())
         #发送命令
