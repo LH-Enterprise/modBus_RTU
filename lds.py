@@ -2,6 +2,22 @@ from machine import Pin, UART
 import uasyncio as asyncio
 import time
 
+
+def loginfo(name,level,info):
+    """设置日志输出格式，包含调用函数名、日志级别、日志信息
+
+    Args:
+        name (str): 调用函数名
+        level (int): 日志级别 (1-DEBUG,2-INFO,3-WARNNING,4-ERROR,5-CRITICAL)
+        info (str): 错误信息
+    """
+    levels_info=['DEBUG','INFO','WARNNING','ERROR','CRITICAL']
+    level_info=levels_info[level-1]
+    res= name +"--"+level_info+"--"+info
+    with open('log.txt', 'a') as f:
+        f.write(res+'\n')
+    print(res)
+
 def modbus_cmd(addr, func, start_addr, data):
     """生成modebus报文
 
@@ -92,7 +108,6 @@ def str2hex(data):
     data = data.replace(" ", "")
     data = bytes.fromhex(data)
     return data
- 
 
 class modbusDevise:
     def __init__(self,baudrate,tx,rx,bits,parity,stop) -> None:
@@ -101,20 +116,22 @@ class modbusDevise:
         
     #判断接收的报文data是否正确，返回ret_data
     def __rev(self,data,cmd):
-        """_summary_
+        """判断接收的报文是否正确
 
         Args:
-            data (_type_): _description_
-            cmd (_type_): _description_
+            data (hex): 接收到的报文数据
+            cmd (str): 发送的报文命令
 
         Returns:
-            _type_: _description_
+            flag (int):错误码
+            retData (str):报文数据部分，若为空则报文错误
         """
         # print("rev",hex2str(data))#data是hex格式
         cmd=str2hex(cmd)
         #crc校验错误返回1
         crc = crc16(data[:-2])
         if(crc!=data[-2:]):
+
             return 1,"crc校验码错误"
         #报文出错：cmd+128 返回2
         if(data[1:2]!=cmd[1:2]):
@@ -133,7 +150,7 @@ class modbusDevise:
             
         #全都没出错返回0表示正确
         flag=0
-        return flag,"写寄存器成功"
+        return flag,"success"
 
     def __calculate_time(self,distance):
         """计算传输距离下正常等待时间
@@ -160,12 +177,19 @@ class modbusDevise:
         self.uart.read(self.uart.any())
         #发送命令
         await self.uart_lock.acquire()
-        self.uart.write(str2hex(cmd))
-        print("cmd",cmd)
-        await asyncio.sleep(phyTime)
+        try:
+            self.uart.write(str2hex(cmd))
+            print("cmd:",cmd)
+        except Exception as e:
+            loginfo("__uartSend",4,"cmd:"+cmd+'--发送指令失败：'+ str(e))
+            self.uart_lock.release()
+            return None
+        finally:
+            await asyncio.sleep(phyTime)
         if self.uart.any():
             data = self.uart.read()
         else:
+            loginfo("__uartSend",4,"cmd:"+cmd+'--接收指令失败：')
             data=None
         self.uart_lock.release()
         return data
@@ -191,29 +215,25 @@ class modbusDevise:
         flag=-1 #错误标识
         while True:
             start_time = time.time() 
-            #清除发送缓冲区和接收缓冲区
             if(timeout<=0):
                 break
             retdata= await self.__uartSend(cmd,phyTime)
             if retdata!=None:
-                flag,result=self.__rev(retdata,cmd) #判断报文是否正确
+                flag,_result=self.__rev(retdata,cmd) #判断报文是否正确
             else:
                 flag=-1
-                result="报文为空"
+                _result="报文为空"
             if flag==0:
-                return flag,result   #ret_data传回数据包部分
+                return flag,_result   #ret_data传回数据包部分
             else:
-                print("接收报文错误：%d,%s"% flag,result) #接收报文错误，重发报文
+                loginfo("__rev",4,"接收报文错误："+str(flag)+str(_result))
+                #报错后重试
             end_time = time.time()  
             timeout = timeout-(end_time - start_time)  # 计算函数执行时间
-        ret_data="回传报文错误:"+result
+
+        ret_data="回传报文错误:"+_result
+        loginfo("send_cmd",4,"cmd:"+cmd+"...接收报文错误："+ret_data)
         return flag,ret_data #发送失败，传回错误信息
-
-
-
-
-
-
 
 
 
