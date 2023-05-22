@@ -182,10 +182,9 @@ class modbusDevise:
             print("cmd:",cmd)
         except Exception as e:
             loginfo("__uartSend",4,"cmd:"+cmd+'--发送指令失败：'+ str(e))
-            self.uart_lock.release()
-            return None
         finally:
             await asyncio.sleep(phyTime)
+        data=""
         if self.uart.any():
             data = self.uart.read()
         else:
