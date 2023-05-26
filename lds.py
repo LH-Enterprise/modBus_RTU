@@ -235,4 +235,3 @@ class modbusDevise:
         return flag,ret_data #发送失败，传回错误信息
 
 
-

@@ -4,7 +4,7 @@ import uasyncio as asyncio
 import gc
 import lds
 
-md=lds.modbusDevise(9600,0, 1, 8, None, 1)
+md=lds.modbusDevise(0,9600,0, 1, 8, None, 1)
 
 
 class RangeFinder:
@@ -101,7 +101,6 @@ async def monitor():
         # d2 = await c2.get_cjy_dis()
         if d1 is not None:
             print("d1:",d1)
-        await asyncio.sleep(2)
 
 
 async def main():
@@ -116,3 +115,6 @@ async def main():
 erha = WDT(timeout=5000)
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main())
+
+
+
