@@ -110,8 +110,8 @@ def str2hex(data):
     return data
 
 class modbusDevise:
-    def __init__(self,baudrate,tx,rx,bits,parity,stop) -> None:
-        self.uart = UART(0, baudrate, tx=Pin(tx), rx=Pin(rx), bits=bits, parity=parity, stop=stop)
+    def __init__(self,id,baudrate,tx,rx,bits,parity,stop) -> None:
+        self.uart = UART(id, baudrate, tx=Pin(tx), rx=Pin(rx), bits=bits, parity=parity, stop=stop)
         self.uart_lock = asyncio.Lock() 
         
     #判断接收的报文data是否正确，返回ret_data
@@ -161,7 +161,7 @@ class modbusDevise:
         Returns:
             int:时间，单位：秒
         """
-        return distance/1000+0.1
+        return distance/1000+0.05
 
     async def __uartSend(self,cmd,phyTime):
         """UART串口传输，发送报文与接收报文
@@ -179,7 +179,7 @@ class modbusDevise:
         await self.uart_lock.acquire()
         try:
             self.uart.write(str2hex(cmd))
-            print("cmd:",cmd)
+            # print("cmd:",cmd)
         except Exception as e:
             loginfo("__uartSend",4,"cmd:"+cmd+'--发送指令失败：'+ str(e))
         finally:

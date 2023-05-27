@@ -1,7 +1,5 @@
-
-from machine import WDT
 import uasyncio as asyncio
-import gc
+import time
 import lds
 
 md=lds.modbusDevise(0,9600,0, 1, 8, None, 1)
@@ -26,13 +24,13 @@ class RangeFinder:
             start_addr (int):寄存器地址
             data (int): 写入的数据
         """
-        flag,ret_data =await md.send_cmd(self.addr,6,start_addr,data,self.distance,timeout=5)
+        flag,ret_data =await md.send_cmd(self.addr,6,start_addr,data,self.distance,timeout=0.3)
         if  flag!=0:
             lds.loginfo("CJY_write_",4,"写入寄存器指令失败..."+ret_data)
             print("写入寄存器指令失败..."+ret_data)
             return False
         else:
-            print("写入寄存器成功")
+            # print("写入寄存器成功")
             return True
 
     async def read_(self,start_addr,data):
@@ -45,7 +43,7 @@ class RangeFinder:
         Returns:
             result(int):读取到的结果
         """
-        flag,ret_data =await md.send_cmd(self.addr,3,start_addr,data,self.distance,timeout=5)
+        flag,ret_data =await md.send_cmd(self.addr,3,start_addr,data,self.distance,timeout=0.3)
         if flag!=0:
             lds.loginfo("CJY_read_",4,"读取寄存器指令失败..."+ret_data)
             print("读取寄存器指令失败..."+ret_data)
@@ -60,7 +58,7 @@ class RangeFinder:
                 factor.append(256*factor[i-1])
             for i in range(1,data_len+1):
                 result=result+ret_data[-i]*factor[i-1]
-            print("read_result=",result)
+            # print("read_result=",result)
             return result
 
 
@@ -91,30 +89,48 @@ class RangeFinder:
             return None    
 
 
-async def monitor():
-    """监测距离，每2s返回一次数据
+async def monitor(t,timeout):
+    """在ts内监测，在每timeout时间段内测量一次数据
+
+     Args:
+            start_addr (int): 寄存器的开始地址
+            data (int): 要读取的字节数
+
     """
-    c1=RangeFinder(1,500)
-    # c2=RangeFinder(2,600)
-    while True:
+    c1=RangeFinder(1,1)
+    timeout1=timeout
+    ds=[]#距离列表，存储了t秒内检测到的数据
+    while t>0:
+        start_time = time.time() 
         d1 = await c1.get_cjy_dis()
-        # d2 = await c2.get_cjy_dis()
-        if d1 is not None:
-            print("d1:",d1)
+        ds.append(d1)
+        end_time = time.time()  
+        timeout = timeout-(end_time - start_time)  # 计算函数执行时间
+        if timeout>0:
+            await asyncio.sleep(timeout)
+        t=t-timeout1
+    # return d
+    print("ds.legth:",len(ds))
+    print("ds:",ds)
+    return ds
 
 
-async def main():
-    asyncio.create_task(monitor())
-    while True:
-        await asyncio.sleep(2)
-        erha.feed()
-        gc.collect()
-        print("memery free:", gc.mem_free(), "memery alloc:", gc.mem_alloc())
+# async def main():
+#     task1=asyncio.create_task(monitor(120,0.34))#60s扫一周，测量180下.一度测一次，一度花费0.34s.
+#     task2=asyncio.create_task(Servo.scan())#扫一圈
+
+#     result=await asyncio.wait_for(task1,timeout=130)
+#     print("result:",result)
+#        getV()
+
+#     while True:
+#         await asyncio.sleep(2)
+#         erha.feed()
+#         gc.collect()
+#         print("memery free:", gc.mem_free(), "memery alloc:", gc.mem_alloc())
         
 
-erha = WDT(timeout=5000)
-loop = asyncio.get_event_loop()
-loop.run_until_complete(main())
-
+# erha = WDT(timeout=5000)
+# asyncio.run(main())
 
 
