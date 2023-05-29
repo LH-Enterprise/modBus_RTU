@@ -95,7 +95,8 @@ async def monitor(t,timeout):
      Args:
             start_addr (int): 寄存器的开始地址
             data (int): 要读取的字节数
-
+    Returns:
+            ds(list):返回距离列表，存储了t秒内检测到的数据
     """
     c1=RangeFinder(1,1)
     timeout1=timeout

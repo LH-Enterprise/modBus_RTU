@@ -93,7 +93,7 @@ async def readCmd(id,cmd,par1=None,par2=None,distance=1,timeout=5):
         cmd (int): 指令值
         par1 (int, optional): 参数1(不同指令参数不同,具体指令参数见说明文档). Defaults to None.
         par2 (int, optional): 参数2. Defaults to None.
-        timeout (int, optional):最长等待时间. Defaults to 1.
+        timeout (int, optional):最长等待时间. Defaults to 5.
 
     Returns:
         flag(int):错误码，0表示正确
@@ -128,11 +128,11 @@ async def writeCmd(id,cmd,par1=None,par2=None,distance=1,timeout=5):
     """发出写指令，无数据返回
 
     Args:
-        id (_type_): _description_
-        cmd (_type_): _description_
-        par1 (_type_, optional): _description_. Defaults to None.
-        par2 (_type_, optional): _description_. Defaults to None.
-        timeout (int, optional): _description_. Defaults to 1.
+        id (int): 舵机id
+        cmd (int): 指令值
+        par1 (int, optional): 参数1(不同指令参数不同,具体指令参数见说明文档). Defaults to None.
+        par2 (int, optional): 参数2. Defaults to None.
+        timeout (int, optional):最长等待时间. Defaults to 5.
     """
     cmd=servoCmd(id,cmd,par1,par2)
     while True:
@@ -199,8 +199,9 @@ def processData(data):
 # 舵机发送对应指令，即可转动。在控制舵机之前，需要设置好舵机的各项参数及id
 #舵机控制角度范围0-1000对应0-240°
 
-
 async def scan():
+    """实现舵机扫描一周，180°来回一遍
+    """
     try:
         await writeCmd(2,1,750,1000*60)  #转到180°，花费60s时间
         await asyncio.sleep(60)
