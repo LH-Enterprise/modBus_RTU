@@ -1,12 +1,12 @@
-from machine import WDT
-import CJY
-import Servo
-import uasyncio as asyncio
-import gc
+# from machine import WDT
+# import CJY
+# import Servo
+# import uasyncio as asyncio
+# import gc
 import math
 
 def processDS(ds,r,d,l):
-    """处理数据列表,剔除异常数据和空数据
+    """处理数据列表,剔除异常数据和空数据,将数据全都加上测距仪长度
     （利用来回扫描得来的两组数据进行处理）
 
     Args:
@@ -27,7 +27,7 @@ def processDS(ds,r,d,l):
         if ds[-1]==None: ds[-1]=r-d
         if ds[i]==None and ds[i-1]!=None and ds[i+1]!=None: #若某个位置未测量到，则取左右两个数据的平均值
             ds[i]=(ds[i-1]+ds[i+1])/2
-        elif ds[i]==None and ds[360-i+1]:
+        elif ds[i]==None and ds[ds_len-i-1]!=None:
             ds[i]=ds[ds_len-i-1]  #取对称的数据
     #处理异常数据 并加上测距仪的数据
     extra=ds[0]-(r+d) 
@@ -44,10 +44,40 @@ def processDS(ds,r,d,l):
 
     return ds[:180] #截取前180个元素返回
 
-def Add_getV(result,r,h,d,l):
+def get_data(ds,r,d,h):
+    """ 分离筒壁与粉料的距离数据,将到桶壁的距离置为0
+
+    Args:
+        ds (list): 距离列表
+        r (int): 圆柱体半径r
+        h (int): 圆柱体高度h
+        d (int): 测距仪距离圆心位置d，若在圆柱圆心左侧则为负，圆心右侧则为正。
+
+    Returns:
+        ds: 距离列表，将到粉料的距离置为0了
+    """
+    # 桶底最大的角度是 r+d/h=tan(0)
+    alpha=math.atan(r+d/h)
+    alpha = math.degrees(alpha) #这个角度代表桶壁到测距仪的最大角度，不可能超过这个角度
+    for i in range(1,179): 
+        if i<alpha:#左半边数据
+            angle = math.radians(i)
+            e = ds[0]/math.cos(angle) 
+            if abs(e) >= 0.01: #误差 0.01m
+                ds[i]=0
+        elif i>(180-alpha):#右半边数据
+            angle=math.radians(180-i)
+            e=ds[i]-ds[-1]/math.cos(angle)
+            if abs(e) >= 0.01: #误差 0.01m
+                ds[i]=0
+    ds[0]=0
+    ds[-1]=0
+    return ds
+
+def Add_getV(ds,r,h,d,l=0):
     """求粉料体积
     Args:
-        result (_type_): _description_
+        result (list):测距仪的结果
         r (int): 圆柱体半径r
         h (int): 圆柱体高度h
         d (int): 测距仪距离圆心位置d，若在圆柱圆心左侧则为负，圆心右侧则为正。
@@ -57,42 +87,32 @@ def Add_getV(result,r,h,d,l):
         V(float): 体积
     """
     #计算过程中的精度处理
-    ds=processDS(result,r,d,l)
+    # ds=processDS(ds,r,d,l)
+    if(ds==None):
+        return None
 
-    #分离筒壁与粉料的距离数据,将到桶壁的距离置为0
+    ds=get_data(ds,r,d,h)
 
-    # 桶底最大的角度是r+d/h=tan(0)
-    alpha=math.atan(r+d/h)
-    alpha = math.degrees(alpha) #这个角度代表桶壁到测距仪的最大角度，不可能超过这个角度
-    for i in range(len(ds)): 
-        if i<alpha:#左半边数据
-            angle = math.radians(i)
-            e = ds[i]+l-ds[0]/math.cos(angle) 
-            if abs(e) >= 0.03: #误差 0.03m
-                ds[i]=0
-        elif i>(180-alpha):#右半边数据
-            angle=math.radians(180-i)
-            e=ds[i]+l-ds[-1]/math.cos(angle)
-            if abs(e) >= 0.03: #误差 0.03m
-                ds[i]=0
     #求出粉料顶端到桶底的高度列表
     highs=[] # 粉料顶端到桶底的高度列表
     lens=[] # （该点垂直于桶底的直线）到(测距仪垂直于桶底直线)的距离
-    for i in range(len(ds)):
+    for i in range(180):
         if(ds[i]!=0):
             beta=math.radians(i)
-            high=h-(ds[i]+l)*math.sin(beta)
-            highs.extend(high)
-            _len=(ds[i]+l)*math.cos(beta)
-            lens.extend(_len)
+            high=h-(ds[i])*math.sin(beta)
+            highs.append(high)
+            _len=(ds[i])*math.cos(beta)
+            lens.append(_len)  # 超过90°lens是负的
         elif(ds[i]==0 and ds[i+1]!=0):
             left=i+1
         elif(ds[i]!=0 and ds[i+1]==0):
             right=i
 
+
     #求出高度列表中长方体的体积并相加
     sumV=0
-    for i in range(right-left+1):
+    print("len(highs):",len(highs))
+    for i in range(len(highs)):
         dx=lens[i+1]-lens[i]
         len0=abs(lens[i]-d) #到圆心的距离
         dy=2*math.sqrt(r**2 - len0**2)
@@ -121,9 +141,7 @@ def Add_getV(result,r,h,d,l):
 # erha = WDT(timeout=5000)
 # asyncio.run(main())
 
-ds=[2 ,2.1 ,2.2 ,2.3 ,2.4 ,2.5 ,2.4 ,2 ]
-V=Add_getV(ds,2,6,-0.5,0)
-print(V)
+
 
 
 
