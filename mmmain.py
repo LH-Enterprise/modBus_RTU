@@ -1,9 +1,15 @@
 # from machine import WDT
-# import CJY
-# import Servo
-# import uasyncio as asyncio
 # import gc
+# import uasyncio as asyncio
 import math
+
+# import CJY
+# from Servo import Servo
+# import lds
+
+
+# servo=Servo(1,50)
+# rangefinder=CJY.RangeFinder(1,500)  
 
 def processDS(ds,r,d,l):
     """处理数据列表,剔除异常数据和空数据,将数据全都加上测距仪长度
@@ -12,11 +18,12 @@ def processDS(ds,r,d,l):
     Args:
         ds (list): 距离
         r (int): 圆柱体半径r
-        d (int): 测距仪距离圆心位置d，若在圆柱圆心左侧则为负，圆心右侧则为正。
+        d (int): 测距仪距离圆心位置d，
         l(int):测距仪长度l
     Returns:
         ds():返回一个180个元素的数组。若为None，则该组数据废了，需要重新测量
     """
+    ##############################################更改角度
     # 若距离列表中超过6个None值，则测量失败
     if ds.count(None)>6:
         return None
@@ -42,94 +49,177 @@ def processDS(ds,r,d,l):
         else:#数据无异常，就加上测距仪的长度和误差大小
             ds[i]=ds[i]+l+extra  
 
-    return ds[:180] #截取前180个元素返回
+    return ds[:150] #截取前180个元素返回
 
-def get_data(ds,r,d,h):
+def separate(ds,r,d,h):
     """ 分离筒壁与粉料的距离数据,将到桶壁的距离置为0
 
     Args:
         ds (list): 距离列表
         r (int): 圆柱体半径r
         h (int): 圆柱体高度h
-        d (int): 测距仪距离圆心位置d，若在圆柱圆心左侧则为负，圆心右侧则为正。
+        d (int): 测距仪距离圆心位置d，
 
     Returns:
         ds: 距离列表，将到粉料的距离置为0了
     """
-    # 桶底最大的角度是 r+d/h=tan(0)
-    alpha=math.atan(r+d/h)
-    alpha = math.degrees(alpha) #这个角度代表桶壁到测距仪的最大角度，不可能超过这个角度
-    for i in range(1,179): 
+    #####################################################更改角度
+    # 桶底最大的角度是 h/(r+d)=tan(0)
+    alpha=math.atan(h/(r-d))   #81
+    alpha = math.degrees(alpha)/1.2 #这个角度代表桶壁到测距仪的最大角度，不可能超过这个角度
+    for i in range(1,len(ds)): 
         if i<alpha:#左半边数据
             angle = math.radians(i)
-            e = ds[0]/math.cos(angle) 
-            if abs(e) >= 0.01: #误差 0.01m
+            e =ds[i]-ds[0]/math.cos(angle) 
+            if abs(e) <= 0.01: #误差 0.005m
                 ds[i]=0
-        elif i>(180-alpha):#右半边数据
+        elif i>(150-alpha):#右半边数据
             angle=math.radians(180-i)
             e=ds[i]-ds[-1]/math.cos(angle)
-            if abs(e) >= 0.01: #误差 0.01m
+            if abs(e) <= 0.01: #误差 0.005m
                 ds[i]=0
     ds[0]=0
     ds[-1]=0
     return ds
 
-def Add_getV(ds,r,h,d,l=0):
+def calculous(highs,lens,r,d):
+    """用微积分的方法计算体积
+
+    Args:
+        highs (list): 粉料顶端到桶底的高度列表
+        lens (list): （该点垂直于桶底的直线）到(测距仪垂直于桶底直线)的距离
+        r (int): 圆柱体半径r
+        d (int): 测距仪距离圆心位置d
+
+    Returns:
+        sumV: 体积
+    """
+    sumV=0
+    _len=r+d #len[-1]应该在的位置
+    if _len-lens[-1]>0.03:
+        #只计算左半边数据，围着y轴绕一圈
+        #找出最高点的index
+        j =lens[0]
+        for i in range(len(lens)):
+            abs(lens[i]-)
+
+        for i in range(j-1):
+            dx= abs(lens[i+1]-lens[i])   
+            len0=abs(lens[i]-d)  #到圆心的距离
+            lens[i]=len0
+            dy=3.1416*len0
+            dh=(highs[i+1]+highs[i])/2 
+            dv=dx*dy*dh
+            sumV+=dv
+    else:
+        #求出高度列表中长方体的体积并相加
+        for i in range(len(highs)-1):
+            dx= abs(lens[i+1]-lens[i])   
+            len0=abs(lens[i]-d)  #到圆心的距离
+            lens[i]=len0
+            dy=3.1416*len0
+            dh=(highs[i+1]+highs[i])/2 
+            dv=dx*dy*dh
+            sumV+=dv
+    return sumV
+
+def caculateV(ds,r,h,d,l=0):
     """求粉料体积
     Args:
         result (list):测距仪的结果
         r (int): 圆柱体半径r
         h (int): 圆柱体高度h
-        d (int): 测距仪距离圆心位置d，若在圆柱圆心左侧则为负，圆心右侧则为正。
+        d (int): 测距仪距离圆心位置d
         l(int):测距仪长度l
 
     Returns:
-        V(float): 体积
+        V(float): 计算得到的体积，若返回None,则说明
     """
     #计算过程中的精度处理
     # ds=processDS(ds,r,d,l)
     if(ds==None):
-        return None
+        return None  #数据出错，返回None
 
-    ds=get_data(ds,r,d,h)
+    ds=separate(ds,r,d,h)
 
     #求出粉料顶端到桶底的高度列表
     highs=[] # 粉料顶端到桶底的高度列表
     lens=[] # （该点垂直于桶底的直线）到(测距仪垂直于桶底直线)的距离
-    for i in range(180):
+    for i in range(150):
         if(ds[i]!=0):
-            beta=math.radians(i)
-            high=h-(ds[i])*math.sin(beta)
-            highs.append(high)
-            _len=(ds[i])*math.cos(beta)
-            lens.append(_len)  # 超过90°lens是负的
-        elif(ds[i]==0 and ds[i+1]!=0):
-            left=i+1
-        elif(ds[i]!=0 and ds[i+1]==0):
-            right=i
+            beta=math.radians(i*1.2)
+            high=h- ds[i]*math.sin(beta)
+            if(i==90): llen=0
+            else: llen=(ds[i])*math.cos(beta) # 超过90°lens是负的
+            highs.append(high) 
+            lens.append(llen) 
+
+    V=calculous(highs,lens,r,d)
+    return V
 
 
-    #求出高度列表中长方体的体积并相加
-    sumV=0
-    print("len(highs):",len(highs))
-    for i in range(len(highs)):
-        dx=lens[i+1]-lens[i]
-        len0=abs(lens[i]-d) #到圆心的距离
-        dy=2*math.sqrt(r**2 - len0**2)
-        dh=(highs[i+1]+highs[i])/2
-        dv=dx*dy*dh
-        sumV+=dv
-    return sumV
+#还需要根据舵机位置实际情况初始化调整舵机角度
+async def init_move(r,d):
+    # 获取当前位置,自动对准桶壁的角度0°,返回当前位置
+    result=servo.readCmd(28)
+    #90°对应375
+    pos=None
+    if result[0]==0:
+        pos=servo.processData(result[1]) #舵机的当前位置
+        pos=pos-375  #pos减90°
+        await servo.writeCmd(1,pos,1000)
+    else:
+        return None
+    d1 = await rangefinder.get_cjy_dis()
+    for i in range(10):
+        if abs(d1-(r-d))<0.01:
+            return pos
+        elif abs(d1-(r+d))<0.01:
+            # 旋转180°
+            pos=pos+750 #pos加180°
+            await servo.writeCmd(1,pos,1000)
+            return pos
+        else:#没转到合适的角度
+            pos=pos+(i-5)
+            await servo.writeCmd(1,pos,1000)
+            d1 = await rangefinder.get_cjy_dis()
+    pos=None
+    return pos
+
+async def scan_getV(r,h,d,l=0):
+    # 获取当前位置,自动对准桶壁的角度0°
+    pos=await init_move(r,d)
+    if(pos!=None):
+        ds=[]
+        for i in range(150):
+            #转动一度,测距
+            pos=pos+i*5
+            await servo.writeCmd(1,pos+i,1000)
+            d = await rangefinder.get_cjy_dis()
+            # sleep(0.4s)
+            ds.append(d)
+        for i in range(180):
+            await servo.writeCmd(1,pos-i,1000)
+            d = await rangefinder.get_cjy_dis()
+            # sleep(0.4s)
+            ds.append(d)
+        # 算体积
+        V=caculateV(ds,r,h,d,l)
+        if(V==None):
+            #测量的数据有问题
+            lds.loginfo("caculateV",4,"测量数据有误，请重新测量")
+        else:
+            print("V",V)
+    else:
+        lds.loginfo("init_move",4,"舵机自动校准位置失败")
+
+    # return V
 
 
-
+#60s扫一周，测量180下.一度测一次，一度花费0.34s.
 # async def main():
-#     task1=asyncio.create_task(CJY.monitor(60,0.34))#60s扫一周，测量180下.一度测一次，一度花费0.34s.
-#     task2=asyncio.create_task(Servo.scan())#扫一圈
-
-#     result=await asyncio.wait_for(task1,timeout=130)
-
-#     Add_getV(result)
+#     r,h,d=2,6,1 #圆柱的半径和高度
+#     asyncio.create_task(scan_getV(r,h,d))
 
 #     while True:
 #         await asyncio.sleep(2)
@@ -137,24 +227,10 @@ def Add_getV(ds,r,h,d,l=0):
 #         gc.collect()
 #         print("memery free:", gc.mem_free(), "memery alloc:", gc.mem_alloc())
         
-
+# servo=Servo(1,50)
+# rangefinder=CJY.RangeFinder(1,500)  
 # erha = WDT(timeout=5000)
 # asyncio.run(main())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

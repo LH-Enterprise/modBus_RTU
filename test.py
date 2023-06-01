@@ -32,25 +32,26 @@ def curve_intersection(a, b, c, d, e):
 def distance(x1, y1, x2, y2):
     """计算两个点之间的距离"""
     ds=math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-    str = "%.3f" % ds
-    return str
+    ds=round(ds, 3)
+    return ds
 
 
 #测距仪的位置(x0,y0)
 def Emit_light(x0,y0,a, b, c,r):
     ds=[]
-    for i in range(180):
-        if(i!=90):
-            beta=math.radians(i)
+    for i in range(150):
+        if(i!=75): #当i不等于90°时
+            j=i*1.2
+            beta=math.radians(j)
             m=math.tan(beta)
             # y=m(x-x0)+y0
             #计算该射线和曲线的交点
             roots=curve_intersection(m,y0-m*x0,a,b,c)
             if roots is None: #没有交点
                 #计算该射线与直线的交点
-                x1=-r if i<90 else r
+                x1=-r if i<75 else r
                 y1=m*(x1-x0)+y0
-            else: #两个交点,一个交点的情况不存在
+            elif isinstance(roots[0], tuple): #两个交点,一个交点的情况不存在
                 if -r < roots[0][0] < r and (roots[1][0]<-r or roots[1][0]>r):
                     x1=roots[0][0]
                     y1=roots[0][1]
@@ -61,25 +62,33 @@ def Emit_light(x0,y0,a, b, c,r):
                     x1=roots[0][0] if abs(roots[0][0])>abs(roots[1][0]) else roots[1][0]
                     y1=m*(x1-x0)+y0
                 else:#两个点都在桶外
-                    x1=-r if i<90 else r
+                    x1=-r if i<75 else r
+                    y1=m*(x1-x0)+y0
+            else:#一个交点
+                if -r<roots[0]<r:
+                    x1=roots[0] 
+                    y1=roots[1]
+                else:
+                    x1=-r if i<75 else r
                     y1=m*(x1-x0)+y0
             d=distance(x0,y0,x1,y1)
             ds.append(d)
         else: #m为正无穷   
             # 找出x=x0时，曲线的坐标y 
             y=a*(x0**2)+b*x0+c
-            d= "%.3f" % (y0-y)
+            d=round(y0-y, 3)
             ds.append(d)
     return ds
     
 
-
-a, b, c = -0.2, 0, 5  # 定义曲线的系数
+a, b, c = -0.2, 0, 4  # 定义曲线的系数
 r,h=2,6 #圆柱的半径和高度
 x0,y0=-1,6 #测距仪坐标
 
-list=Emit_light(x0, y0, a, b, c,r)
-ds=[float(elem) for elem in list]
+ds=Emit_light(x0, y0, a, b, c,r)
+
+V=mmmain.caculateV(ds,2,6,1,0)
+print("V:",V)
 
 # 随机将几个元素置为None
 # list=[]
@@ -96,6 +105,4 @@ ds=[float(elem) for elem in list]
 # print(ds)
 # print("len(list):",len(ds))
 
-V=mmmain.Add_getV(ds,2,6,-1,0)
-print("V:",V)
 

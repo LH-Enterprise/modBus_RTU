@@ -1,8 +1,12 @@
+from machine import WDT
+import gc
+import Servo
 import uasyncio as asyncio
 import time
 import lds
 
-md=lds.modbusDevise(0,9600,0, 1, 8, None, 1)
+
+md=lds.modbusDevise(0,9600,12, 13, 8, None, 1)
 
 
 class RangeFinder:
@@ -98,7 +102,7 @@ async def monitor(t,timeout):
     Returns:
             ds(list):返回距离列表，存储了t秒内检测到的数据
     """
-    c1=RangeFinder(1,1)
+    c1=RangeFinder(1,500)
     timeout1=timeout
     ds=[]#距离列表，存储了t秒内检测到的数据
     while t>0:
@@ -113,25 +117,5 @@ async def monitor(t,timeout):
     # return d
     print("ds.legth:",len(ds))
     print("ds:",ds)
-    return ds
-
-
-# async def main():
-#     task1=asyncio.create_task(monitor(120,0.34))#60s扫一周，测量180下.一度测一次，一度花费0.34s.
-#     task2=asyncio.create_task(Servo.scan())#扫一圈
-
-#     result=await asyncio.wait_for(task1,timeout=130)
-#     print("result:",result)
-#        getV()
-
-#     while True:
-#         await asyncio.sleep(2)
-#         erha.feed()
-#         gc.collect()
-#         print("memery free:", gc.mem_free(), "memery alloc:", gc.mem_alloc())
-        
-
-# erha = WDT(timeout=5000)
-# asyncio.run(main())
-
+    # return ds
 
