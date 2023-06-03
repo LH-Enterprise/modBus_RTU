@@ -1,6 +1,3 @@
-from machine import WDT
-import gc
-import Servo
 import uasyncio as asyncio
 import time
 import lds
