@@ -93,14 +93,14 @@ class Servo:
         else:
             return 3,"数据长度出错" #数据格式错误
 
-    async def readCmd(self,cmd,par1=None,par2=None,timeout=5):
+    async def readCmd(self,cmd,par1=None,par2=None,timeout=1):
         """发出读指令，有数据返回
 
         Args:
             cmd (int): 指令值
             par1 (int, optional): 参数1(不同指令参数不同,具体指令参数见说明文档). Defaults to None.
             par2 (int, optional): 参数2. Defaults to None.
-            timeout (int, optional):最长等待时间. Defaults to 5.
+            timeout (int, optional):最长等待时间. Defaults to 1.
 
         Returns:
             flag(int):错误码，0表示正确
@@ -131,14 +131,14 @@ class Servo:
         return flag,ret_data #发送失败，传回错误信息
 
         
-    async def writeCmd(self,cmd,par1=None,par2=None,timeout=5):
+    async def writeCmd(self,cmd,par1=None,par2=None,timeout=1):
         """发出写指令，无数据返回
 
         Args:
             cmd (int): 指令值
             par1 (int, optional): 参数1(不同指令参数不同,具体指令参数见说明文档). Defaults to None.
             par2 (int, optional): 参数2. Defaults to None.
-            timeout (int, optional):最长等待时间. Defaults to 5.
+            timeout (int, optional):最长等待时间. Defaults to 1.
         """
         cmd=self.servoCmd(cmd,par1,par2)
         while True:
@@ -151,7 +151,7 @@ class Servo:
             await md.uart_lock.acquire()
             try:
                 md.uart.write(lds.str2hex(cmd))
-                print("cmd:",cmd)
+                # print("cmd:",cmd)
                 return True
             except Exception as e:
                 lds.loginfo("Servo__uartSend",4,"cmd:"+str(cmd)+'--发送指令失败：'+ str(e))
@@ -204,17 +204,14 @@ class Servo:
     
 # 舵机发送对应指令，即可转动。在控制舵机之前，需要设置好舵机的各项参数及id
 #舵机控制角度范围0-1000对应0-240°
-async def servo_move(pos,t):
-    """实现舵机扫描一周,转到pos位置,花费t秒时间
-
-    """
-    try:
-        s=Servo(1,50)
-        await s.writeCmd(1,pos,t)  
-    except Exception as e:
-        lds.loginfo("Servo-scan",4,"舵机转动失败--"+str(e))
-
-
+    async def get_currentPos(self):
+        flag,result=await self.readCmd(28)
+        if(flag==0):
+            pos=self.processData(result)
+        else:
+            pos=None
+            raise Exception("读取当前位置失败")
+        return pos
 
 
 

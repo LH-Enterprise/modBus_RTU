@@ -1,13 +1,9 @@
 import uasyncio as asyncio
 import time
-import lds
-
-
-md=lds.modbusDevise(0,9600,12, 13, 8, None, 1)
 
 
 class RangeFinder:
-    def __init__(self,id,distance) -> None:
+    def __init__(self,id,distance,md) -> None:
         """初始化类RangeFinder
 
         Args:
@@ -16,7 +12,7 @@ class RangeFinder:
         """
         self.addr=id
         self.distance=distance
-        
+        self.md=md
 
     async def write_(self,start_addr,data):
         """写入寄存器
@@ -25,14 +21,11 @@ class RangeFinder:
             start_addr (int):寄存器地址
             data (int): 写入的数据
         """
-        flag,ret_data =await md.send_cmd(self.addr,6,start_addr,data,self.distance,timeout=0.3)
-        if  flag!=0:
-            lds.loginfo("CJY_write_",4,"写入寄存器指令失败..."+ret_data)
-            print("写入寄存器指令失败..."+ret_data)
-            return False
-        else:
-            # print("写入寄存器成功")
-            return True
+        ret_data =await self.md.send_cmd(self.addr,6,start_addr,data,self.distance,timeout=0.3)
+        if(ret_data==None):
+            raise Exception("RangeFinder写入寄存器失败")
+        return True
+
 
     async def read_(self,start_addr,data):
         """读取寄存器
@@ -44,50 +37,38 @@ class RangeFinder:
         Returns:
             result(int):读取到的结果
         """
-        flag,ret_data =await md.send_cmd(self.addr,3,start_addr,data,self.distance,timeout=0.3)
-        if flag!=0:
-            lds.loginfo("CJY_read_",4,"读取寄存器指令失败..."+ret_data)
-            print("读取寄存器指令失败..."+ret_data)
-            return None
-        else:
-            #处理数据---测距仪的处理方式
-            ret_data=lds.str2hex(ret_data)
-            data_len=int(ret_data[0])  
-            factor=[1] #因子矩阵
-            result=0 #结果
-            for i in range(1,data_len):
-                factor.append(256*factor[i-1])
-            for i in range(1,data_len+1):
-                result=result+ret_data[-i]*factor[i-1]
-            # print("read_result=",result)
-            return result
+        message =await self.md.send_cmd(self.addr,3,start_addr,data,self.distance,timeout=0.3)
+        if(message==None):
+            raise Exception("RangeFinder读寄存器失败")
+        #处理数据---测距仪的处理方式
+        ret_data=self.md.checkMessLen(message)
+        data_len=int(ret_data[0])  
+        factor=[1] #因子矩阵
+        result=0 #结果
+        for i in range(1,data_len):
+            factor.append(256*factor[i-1])
+        for i in range(1,data_len+1):
+            result=result+ret_data[-i]*factor[i-1]
+        return result
 
 
     async def get_cjy_dis(self):
         """得到该测距仪对象所测量的距离
 
         Returns:
-            dis(int):距离，发生错误返回None 
+            dis(float):距离，发生错误返回None 
         """
-        res=await self.read_(16,1)
-        if res==0:
-            if await self.write_(16,1): #向寄存器写入1表示测量一次
-                res=1
-            else:
-                lds.loginfo("get_cjy_dis",4,"write_(16,1)error...")
-                return None
-        if res==1:
-            res=await self.read_(21,2)   #测量距离得到的结果要除10000
-            if res!=None:
+        try:
+            res=await self.read_(16,1)
+            if res==0:
+                if await self.write_(16,1): #向寄存器写入1表示测量一次
+                    res=1
+            if res==1:
+                res=await self.read_(21,2)   #测量距离得到的结果要除10000
                 dis=int(res)/10000
-                print("dis:",dis)
                 return dis
-            else:
-                lds.loginfo("get_cjy_dis",4,"read_(21,2)error...")
-                return None
-        else:
-            lds.loginfo("get_cjy_dis",4,"read_(16,1)||write_(16,1)error...")
-            return None    
+        except Exception as e:
+            raise Exception("测距仪测距失败--"+str(e))
 
 
 async def monitor(t,timeout):
@@ -111,7 +92,6 @@ async def monitor(t,timeout):
         if timeout>0:
             await asyncio.sleep(timeout)
         t=t-timeout1
-    # return d
     print("ds.legth:",len(ds))
     print("ds:",ds)
     # return ds
