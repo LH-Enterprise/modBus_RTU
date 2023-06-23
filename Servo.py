@@ -1,12 +1,11 @@
 #!/usr/bin/python3
 import time
-import lds
+from machine import Pin, UART
+from parameter import errorCode
 import uasyncio as asyncio
 
-md=lds.modbusDevise(1,115200, 4, 5, 8, None, 1)
-
 class Servo:
-    def __init__(self,id,distance) -> None:
+    def __init__(self,id,baudrate,tx,rx,bits,parity,stop,distance) -> None:
         """初始化类Servo
 
         Args:
@@ -15,6 +14,56 @@ class Servo:
         """
         self.id=id
         self.distance=distance
+        self.uart = UART(id, baudrate, tx=Pin(tx), rx=Pin(rx), bits=bits, parity=parity, stop=stop)
+
+    def __hex2str(self,data):
+        """hex编码的bytes字节流转换成str，更便于人阅读
+
+        Args:
+            data (bytes): 要转换的数据
+
+        Returns:
+            data(str):转换后的数据
+        """
+        data = data.hex()
+        data = data.upper()
+        data = data.replace(" ", "")
+        data = data.replace("0X", "")
+        data = data.replace("0x", "")
+        data = data.replace("X", "")
+        data = data.replace("x", "")
+        data = data.replace(" ", "")
+        return data
+
+    def __str2hex(self,data):
+        """str转换成hex编码的bytes字节流，机器只支持hex编码格式
+
+        Args:
+            data (str): 要转换的数据
+
+        Returns:
+            data(bytes):转换后的数据
+        """
+        data = data.replace(" ", "")
+        data = data.replace("0X", "")
+        data = data.replace("0x", "")
+        data = data.replace("X", "")
+        data = data.replace("x", "")
+        data = data.replace(" ", "")
+        data = bytes.fromhex(data)
+        return data
+
+    def __calculate_time(self,distance):
+        """计算传输距离下正常等待时间
+
+        Args:
+            distance (int): 设备的物理距离
+
+        Returns:
+            int:时间，单位：秒
+        """
+        return distance/1000+0.05
+
 
     def checkSum(self,buf):
         """计算校验和
@@ -32,7 +81,7 @@ class Servo:
         _sum = ~_sum  #取反
         return 0xff & _sum  #取低8位
 
-    def servoCmd(self, cmd, par1 = None, par2 = None):
+    def generateServoCmd(self, cmd, par1 = None, par2 = None):
         """生成控制舵机的命令
 
         Args:
@@ -62,7 +111,7 @@ class Servo:
         ##计算校验和
         Csum = self.checkSum(buf)
         buf.append(Csum)  
-        return md.hex2str(buf)
+        return self.__hex2str(buf)
         
     def revCheck(self,data):
         """判断接收的报文是否正确
@@ -74,20 +123,20 @@ class Servo:
             retData (str):报文数据部分，若为空则报文错误
         """
         if(data==None):
-            raise Exception("checkRevMess--cmd:"+cmd+"--接收报文为空")
+            return errorCode["noReceive"]
         
         #crc校验错误
         crc = self.checkSum(data[:-1])
         if crc!=data[-1]:
-            raise Exception("crc校验码错误")
+            return errorCode["crcCheckSum"]
         
         #判断读到的数据格式对不对
         ret_data=data[2:-1] #hex格式 #剥离报文头尾
         data_len=int(ret_data[1])
         if len(ret_data)==data_len:   #判断数据格式是否正确
-            return ret_data
+            return True
         else:
-            raise Exception("数据长度出错") #数据格式错误
+            return errorCode["messageLengthError"] #数据格式错误
 
     async def readCmd(self,cmd,par1=None,par2=None,timeout=1):
         """发出读指令，有数据返回
@@ -102,22 +151,32 @@ class Servo:
             flag(int):错误码，0表示正确
             ret_data:若flag=0，则传回数据包，否则传回错误信息
         """
-        cmd=self.servoCmd(cmd,par1,par2)
-        phyTime=md.__calculate_time(self.distance)
-        while True:
+        cmd=self.generateServoCmd(cmd,par1,par2)
+        phyTime=self.__calculate_time(self.distance)
+        flag,revMessage=0,None
+        while timeout>0:
             start_time = time.time() 
-            if(timeout<=0):
-                break
-            try:
-                retdata=await md.__uartSend(cmd,phyTime)
-                message=self.revCheck(retdata) #判断报文是否正确
-                return message   #ret_data传回数据包部分
-            except Exception as e:
-                print(e.args)
+            #清空读写缓冲区
+            self.uart.write(b'')
+            self.uart.read(self.uart.any())
+            #发送指令
+            self.uart.write(self.__str2hex(cmd))
+            # print("cmd:",cmd)
+            await asyncio.sleep(phyTime)
+            if self.uart.any():
+                revMessage = self.uart.read()
+                # print("revMessage",revMessage)
+            flag=self.revCheck(revMessage) #判断报文是否正确
+            # print("flag",flag)
+            if flag:
+                return flag,revMessage
+            else:
                 #报错后重试
-            end_time = time.time()  
-            timeout = timeout-(end_time - start_time)  # 计算函数执行时间
-        return None
+                print("servo send_cmd 错误：cmd="+cmd+", flag="+str(flag))
+                end_time = time.time()  
+                timeout = timeout-(end_time - start_time)  # 计算函数执行时间
+        error = list(errorCode.keys())[-flag-1]
+        return flag,error
 
         
     async def writeCmd(self,cmd,par1=None,par2=None,timeout=1):
@@ -129,27 +188,16 @@ class Servo:
             par2 (int, optional): 参数2. Defaults to None.
             timeout (int, optional):最长等待时间. Defaults to 1.
         """
-        cmd=self.servoCmd(cmd,par1,par2)
-        phyTime=md.__calculate_time(self.distance)
-        while True:
-            start_time = time.time() 
-            if(timeout<=0):
-                break
-            md.uart.write(b'')
-            md.uart.read(md.uart.any())
-            #发送命令
-            try:
-                md.uart.write(lds.str2hex(cmd))
-                # print("cmd:",cmd)
-                return True
-            except Exception as e:
-                print(e)
-            finally:
-                await asyncio.sleep(phyTime)
-            end_time = time.time()  
-            timeout = timeout-(end_time - start_time)  # 计算函数执行时间
-        return False
-
+        cmd=self.generateServoCmd(cmd,par1,par2)
+        phyTime=self.__calculate_time(self.distance)
+        self.uart.write(b'')
+        self.uart.read(self.uart.any())
+        #发送命令
+        self.uart.write(self.__str2hex(cmd))
+        # print("cmd:",cmd)
+        await asyncio.sleep(phyTime)
+            
+        
     def processData(self,data):
         """将报文中的信息提取出来
 
@@ -159,8 +207,7 @@ class Servo:
         Returns:
             value(int): 依据报文长度，可能返回一个数字，也可能返回两个数字
         """
-        if data==None:
-            return None
+        data=data[2:-1]
         if(data[1]==5):
             par=data[3:]
             par=bytes(reversed(par))
@@ -194,13 +241,16 @@ class Servo:
 # 舵机发送对应指令，即可转动。在控制舵机之前，需要设置好舵机的各项参数及id
 #舵机控制角度范围0-1000对应0-240°
     async def get_currentPos(self):
-        result=await self.readCmd(28)
-        if result!=None:
+        flag,result=await self.readCmd(28)
+        if flag:
             pos=self.processData(result)
             return pos
         else:
-            raise Exception("读取当前位置失败")
+            raise Exception("servo读取当前位置失败--"+"flag="+str(flag)+","+str(result))
 
 
-
+    async def turn2PosInTime(self,pos,time):
+        await self.writeCmd(1,pos,time)
+        await asyncio.sleep_ms(time)
+    
 

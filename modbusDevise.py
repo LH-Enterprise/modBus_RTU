@@ -1,4 +1,5 @@
 from machine import Pin, UART
+from parameter import errorCode
 import uasyncio as asyncio
 import time
 
@@ -80,6 +81,7 @@ class modbusDevise:
         data = data.replace("x", "")
         data = data.replace(" ", "")
         return data
+    
     def str2hex(self,data):
         """str转换成hex编码的bytes字节流，机器只支持hex编码格式
 
@@ -107,20 +109,19 @@ class modbusDevise:
             cmd (str): 发送的报文命令
 
         Returns:
-            ret_data (hex):报文数据部分，若为空则报文错误
+            flag(int):错误码，若没问题返回True
         """
         if(data==None):
-            raise Exception("checkRevMess--cmd:"+cmd+"--接收报文为空")
+            return errorCode["noReceive"]
         cmd_hex=self.str2hex(cmd)
-        
         #crc校验错误返回
         crc = self.crc16(data[:-2])
         if(crc!=data[-2:]):
-            raise Exception("checkRevMess--cmd:"+cmd+"--crc校验码错误")
+            return errorCode["crcCheckSum"]
         #报文出错：cmd+128 返回
         if(data[1:2]!=cmd_hex[1:2]):
-            raise Exception("checkRevMess--cmd:"+cmd+"--报文出错rev.func=cmd.func+128")
-        return data
+            return errorCode["revMessageError"]
+        return True
     
     #只针对读指令，针对需要处理返回数据的指令
     def checkMessLen(self,data):
@@ -129,7 +130,7 @@ class modbusDevise:
         if len(ret_data)==data_len+1:   #判断数据格式是否正确
             return ret_data 
         else:
-            raise Exception("checkRevMess"+"--报文数据长度出错")
+            return errorCode["messageLengthError"]
 
     def __calculate_time(self,distance):
         """计算传输距离下正常等待时间
@@ -142,36 +143,6 @@ class modbusDevise:
         """
         return distance/1000+0.05
 
-    async def __uartSend(self,cmd,phyTime):
-        """UART串口传输，发送报文与接收报文
-
-        Args:
-            cmd (str): 待发送命令
-            phyTime (int): 等待报文回传的时间
-
-        Returns:
-            data(bytes): 接收到的报文（hex编码格式）
-        """
-        self.uart.write(b'')
-        self.uart.read(self.uart.any())
-        #发送命令
-        await self.uart_lock.acquire()
-        try:
-            self.uart.write(self.str2hex(cmd))
-            # print("cmd:",cmd)
-        except Exception as e:
-            raise Exception("__uartSend--cmd:"+cmd+'--发送指令失败：'+ str(e))
-        finally:
-            await asyncio.sleep(phyTime)
-        data=None
-        try:
-            if self.uart.any():
-                data = self.uart.read()
-        except Exception as e:
-            raise Exception("__uartSend--cmd:"+cmd+'--接收指令失败：')
-        finally:
-            self.uart_lock.release()
-            return data
 
     #addr从机地址，func功能码，start_addr寄存器地址, data数据，distance传输距离(米)，timeout等待超时
     async def send_cmd(self,addr,func,start_addr,data,distance,timeout):
@@ -186,22 +157,36 @@ class modbusDevise:
             timeout (int): 最长等待时间
 
         Returns:
-            ret_data(hex):传回数据报文
+            flag(hex):传回数据报文
         """
         cmd=self.modbus_cmd(addr,func,start_addr,data)
         phyTime=self.__calculate_time(distance)
-        while True:
+        flag,revMessage=0,None
+        while timeout>0:
             start_time = time.time() 
-            if(timeout<=0):
-                break
-            try:
-                retdata= await self.__uartSend(cmd,phyTime)
-                messages=self.checkRevMess(retdata,cmd) #判断报文是否正确
-                return messages   #传回数据报文
-            except Exception as e:
-                print(e.args)
-                #报错后重试
-            end_time = time.time()  
-            timeout = timeout-(end_time - start_time)  # 计算函数执行时间
-        return None
+            #清空读写缓冲区
+            self.uart.write(b'')
+            self.uart.read(self.uart.any())
+            await self.uart_lock.acquire()
+            #发送指令
+            self.uart.write(self.str2hex(cmd))
+            # print("cmd:",cmd)
+            await asyncio.sleep(phyTime)
 
+            if self.uart.any():
+                revMessage = self.uart.read()
+            self.uart_lock.release()
+            flag=self.checkRevMess(revMessage,cmd) #判断报文是否正确
+            if flag:
+                return flag,revMessage
+            else:
+                #报错后重试
+                print("send_cmd 错误：cmd="+cmd+", flag="+str(flag))
+                end_time = time.time()  
+                timeout = timeout-(end_time - start_time)  # 计算函数执行时间
+        error = list(errorCode.keys())[-flag-1]
+        # raise Exception("send_cmd 错误：cmd="+cmd+", flag="+str(flag)+","+error)
+        return flag,error
+
+
+    
