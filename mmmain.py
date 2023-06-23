@@ -177,20 +177,6 @@ async def testDevise():
     except Exception as e:
         print(e)
 
-# async def test(flag):
-#     while flag:
-#         try:
-#             if dropFinish.value()==1:
-#                 print("drop finish......")
-#                 results = await asyncio.gather(monitorTemperature(), testDevise())
-#                 print("results:",results)
-#                 print("measuredFinish.....")
-
-#             await asyncio.sleep(2)
-#         except Exception as e:
-#                 print(e)
-#         finally:
-#             await asyncio.sleep_ms(50)
 
 async def main():
     #先把继电器所有开关都关闭
