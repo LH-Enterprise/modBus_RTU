@@ -19,7 +19,10 @@ servo=Servo(1,115200, 4, 5, 8, None, 1,50)
 rangefinder=RangeFinder(1,50,modbus)  
 thermometer=Thermometer(2,50,modbus)
 erha = WDT(timeout=5000)
-reachPosition = Pin(14, Pin.IN) #到达位置信号
+reachPosition1 = Pin(18, Pin.IN) #到达1号粉仓信号
+reachPosition2 = Pin(19, Pin.IN) #到达2号粉仓信号
+reachPosition3 = Pin(20, Pin.IN) #到达3号粉仓信号
+reachPosition4 = Pin(21, Pin.IN) #到达4号粉仓信号
 dropFinish = Pin(15, Pin.IN) #下降完成信号
 
 
@@ -123,12 +126,12 @@ async def monitorTemperature():
         await asyncio.sleep_ms(50)
             
 
-async def monitorReachPosition(flag):
+async def monitorReachPosition1(flag):
     while flag:
         try:
-            if reachPosition.value() == 1: 
+            if reachPosition1.value() == 1: 
                 #测量粉仓是否满了
-                print("reach Position")
+                print("reach Position 1")
                 dis = await rangefinder.get_cjy_dis()
                 if dis-FeedBucket["disOfRangefinder2cylinderTop"]<0.05:
                     #粉仓满了,怎么做？
@@ -137,10 +140,67 @@ async def monitorReachPosition(flag):
                     #粉仓没满，可以下降
                     await relay.writeOneRelay(DeviseCode["startDrop"],True)
         except Exception as e:
-            log.loginfo("ReachPosition",4,str(e))
+            log.loginfo("ReachPosition1",4,str(e))
         finally:
             await asyncio.sleep_ms(50)
         
+
+async def monitorReachPosition2(flag):
+    while flag:
+        try:
+            if reachPosition2.value() == 1: 
+                #测量粉仓是否满了
+                print("reach Position 2")
+                dis = await rangefinder.get_cjy_dis()
+                if dis-FeedBucket["disOfRangefinder2cylinderTop"]<0.05:
+                    #粉仓满了,怎么做？
+                    pass
+                else:
+                    #粉仓没满，可以下降
+                    await relay.writeOneRelay(DeviseCode["startDrop"],True)
+        except Exception as e:
+            log.loginfo("ReachPosition2",4,str(e))
+        finally:
+            await asyncio.sleep_ms(50)
+        
+        
+async def monitorReachPosition3(flag):
+    while flag:
+        try:
+            if reachPosition3.value() == 1: 
+                #测量粉仓是否满了
+                print("reach Position 3")
+                dis = await rangefinder.get_cjy_dis()
+                if dis-FeedBucket["disOfRangefinder2cylinderTop"]<0.05:
+                    #粉仓满了,怎么做？
+                    pass
+                else:
+                    #粉仓没满，可以下降
+                    await relay.writeOneRelay(DeviseCode["startDrop"],True)
+        except Exception as e:
+            log.loginfo("ReachPosition3",4,str(e))
+        finally:
+            await asyncio.sleep_ms(50)
+
+
+async def monitorReachPosition4(flag):
+    while flag:
+        try:
+            if reachPosition4.value() == 1: 
+                #测量粉仓是否满了
+                print("reach Position 4")
+                dis = await rangefinder.get_cjy_dis()
+                if dis-FeedBucket["disOfRangefinder2cylinderTop"]<0.05:
+                    #粉仓满了,怎么做？
+                    pass
+                else:
+                    #粉仓没满，可以下降
+                    await relay.writeOneRelay(DeviseCode["startDrop"],True)
+        except Exception as e:
+            log.loginfo("ReachPosition3",4,str(e))
+        finally:
+            await asyncio.sleep_ms(50)
+
 
 async def monitorDropFinish(flag):
     while flag:

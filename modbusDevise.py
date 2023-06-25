@@ -175,7 +175,7 @@ class modbusDevise:
 
             if self.uart.any():
                 revMessage = self.uart.read()
-            self.uart_lock.release()
+            await self.uart_lock.release()
             flag=self.checkRevMess(revMessage,cmd) #判断报文是否正确
             if flag:
                 return flag,revMessage
