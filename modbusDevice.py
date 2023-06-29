@@ -3,7 +3,7 @@ from parameter import errorCode
 import uasyncio as asyncio
 import time
 
-class modbusDevise:
+class modbusDevice:
     def __init__(self,id,baudrate,tx,rx,bits,parity,stop) -> None:
         self.uart = UART(id, baudrate, tx=Pin(tx), rx=Pin(rx), bits=bits, parity=parity, stop=stop)
         self.uart_lock = asyncio.Lock() 
@@ -111,7 +111,7 @@ class modbusDevise:
         Returns:
             flag(int):错误码，若没问题返回True
         """
-        if(data==None):
+        if data is None:
             return errorCode["noReceive"]
         cmd_hex=self.str2hex(cmd)
         #crc校验错误返回
@@ -161,7 +161,7 @@ class modbusDevise:
         """
         cmd=self.modbus_cmd(addr,func,start_addr,data)
         phyTime=self.__calculate_time(distance)
-        flag,revMessage=0,None
+        RevMessFlag,revMessage,error=0,None,None
         while timeout>0:
             start_time = time.time() 
             #清空读写缓冲区
@@ -175,18 +175,21 @@ class modbusDevise:
 
             if self.uart.any():
                 revMessage = self.uart.read()
-            await self.uart_lock.release()
-            flag=self.checkRevMess(revMessage,cmd) #判断报文是否正确
-            if flag:
-                return flag,revMessage
+            self.uart_lock.release()
+            RevMessFlag=self.checkRevMess(revMessage,cmd) #判断报文是否正确
+
+            if RevMessFlag is True:
+                return RevMessFlag,revMessage
             else:
                 #报错后重试
-                print("send_cmd 错误：cmd="+cmd+", flag="+str(flag))
+                print("send_cmd 错误：cmd="+cmd+", flag="+str(RevMessFlag))
                 end_time = time.time()  
                 timeout = timeout-(end_time - start_time)  # 计算函数执行时间
-        error = list(errorCode.keys())[-flag-1]
-        # raise Exception("send_cmd 错误：cmd="+cmd+", flag="+str(flag)+","+error)
-        return flag,error
+        for k, v in errorCode.items():
+            if v == RevMessFlag:
+                error=k
+        # print("error:",error)
+        return RevMessFlag,error
 
 
     

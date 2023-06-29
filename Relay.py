@@ -29,3 +29,11 @@ class Relay:
         if flag is not True:
             raise Exception("writeAllRelay error--"+", flag="+str(flag)+","+message)
 
+
+    async def getAllStatus(self):
+        flag,message =await self.modbus.send_cmd(self.addr,func=1,start_addr=0,data=8,distance=self.distance,timeout=1)
+        if flag is not True:
+            raise Exception("RelaygetStatus error--"+", flag="+str(flag)+","+message)
+        else:
+            status = "{0:08b}".format(message[3])
+            return status

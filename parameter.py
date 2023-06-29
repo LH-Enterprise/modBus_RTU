@@ -11,8 +11,10 @@ DeviseCode={
     "Servo":0,
     "RangeFinder":1,
     "Thermometer":2,
-    "startDrop":6,
-    "measuredFinish":7
+    "canDescend":4,
+    "canNotDescend":5,
+    "measureComplete":6,
+    "measureFailure":7
 }
 
 
