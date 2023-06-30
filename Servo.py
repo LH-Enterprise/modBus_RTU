@@ -153,7 +153,7 @@ class Servo:
         """
         cmd=self.generateServoCmd(cmd,par1,par2)
         phyTime=self.__calculate_time(self.distance)
-        flag,revMessage=0,None
+        RevMessFlag,revMessage=0,None
         while timeout>0:
             start_time = time.time() 
             #清空读写缓冲区
@@ -166,17 +166,17 @@ class Servo:
             if self.uart.any():
                 revMessage = self.uart.read()
                 # print("revMessage",revMessage)
-            flag=self.revCheck(revMessage) #判断报文是否正确
-            # print("flag",flag)
-            if flag:
-                return flag,revMessage
+            RevMessFlag=self.revCheck(revMessage) #判断报文是否正确
+            # print("flag:",RevMessFlag)
+            if RevMessFlag is True:
+                return RevMessFlag,revMessage
             else:
                 #报错后重试
-                print("servo send_cmd 错误：cmd="+cmd+", flag="+str(flag))
+                print("servo send_cmd 错误：cmd="+cmd+", flag="+str(RevMessFlag))
                 end_time = time.time()  
                 timeout = timeout-(end_time - start_time)  # 计算函数执行时间
-        error = list(errorCode.keys())[-flag-1]
-        return flag,error
+        error = list(errorCode.keys())[-RevMessFlag-1]
+        return RevMessFlag,error
 
         
     async def writeCmd(self,cmd,par1=None,par2=None,timeout=1):
@@ -241,12 +241,12 @@ class Servo:
 # 舵机发送对应指令，即可转动。在控制舵机之前，需要设置好舵机的各项参数及id
 #舵机控制角度范围0-1000对应0-240°
     async def get_currentPos(self):
-        flag,result=await self.readCmd(28)
-        if flag:
-            pos=self.processData(result)
+        RevMessFlag,message=await self.readCmd(28)
+        if RevMessFlag is True:
+            pos=self.processData(message)
             return pos
         else:
-            raise Exception("servo读取当前位置失败--"+"flag="+str(flag)+","+str(result))
+            raise Exception("servo读取当前位置失败--"+"flag="+str(RevMessFlag)+","+str(message))
 
 
     async def turn2PosInTime(self,pos,time):

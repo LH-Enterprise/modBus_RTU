@@ -20,8 +20,8 @@ class Thermometer:
         Returns:
             temperature(int):温度值，发生错误抛出异常
         """
-        flag,ret_data =await self.modbus.send_cmd(self.addr,func=4,start_addr=1024,data=1,distance=self.distance,timeout=1)
-        if flag:
+        RevMessFlag,ret_data =await self.modbus.send_cmd(self.addr,func=4,start_addr=1024,data=1,distance=self.distance,timeout=1)
+        if RevMessFlag is True:
             # tempera=self.ProcessTemperaMeasure(ret_data)
             ret_data=self.modbus.checkMessLen(ret_data) #检查报文长度是否正确
             if ret_data==errorCode["messageLengthError"]:
@@ -35,7 +35,7 @@ class Thermometer:
                 tempera=value/10
                 return tempera
         else:
-            raise Exception("温度计getTemperature错误："+", flag="+str(flag)+","+ret_data)
+            raise Exception("温度计getTemperature错误："+", flag="+str(RevMessFlag)+","+ret_data)
 
 
 

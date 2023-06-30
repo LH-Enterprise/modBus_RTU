@@ -20,11 +20,11 @@ class RangeFinder:
             start_addr (int):寄存器地址
             data (int): 写入的数据
         """
-        flag,ret_data =await self.modbus.send_cmd(self.addr,6,start_addr,data,self.distance,timeout=1)
-        if flag:
+        RevMessFlag,ret_data =await self.modbus.send_cmd(self.addr,6,start_addr,data,self.distance,timeout=1)
+        if RevMessFlag is True:
             return True
         else:
-            raise Exception(" 测距仪写寄存器错误："+", flag="+str(flag)+","+ret_data)
+            raise Exception(" 测距仪写寄存器错误："+", flag="+str(RevMessFlag)+","+ret_data)
 
     async def read_(self,start_addr,data):
         """读取寄存器
@@ -36,8 +36,8 @@ class RangeFinder:
         Returns:
             result(int):读取到的结果
         """
-        flag,ret_data =await self.modbus.send_cmd(self.addr,3,start_addr,data,self.distance,timeout=1)
-        if flag:
+        RevMessFlag,ret_data =await self.modbus.send_cmd(self.addr,3,start_addr,data,self.distance,timeout=1)
+        if RevMessFlag is True:
             #处理数据---测距仪的处理方式
             ret_data=self.modbus.checkMessLen(ret_data)
             data_len=int(ret_data[0])  
@@ -49,7 +49,7 @@ class RangeFinder:
                 result=result+ret_data[-i]*factor[i-1]
             return result
         else:
-            raise Exception(" 测距仪读寄存器错误："+", flag="+str(flag)+","+ret_data)
+            raise Exception(" 测距仪读寄存器错误："+", flag="+str(RevMessFlag)+","+ret_data)
         
     async def get_cjy_dis(self):
         """得到该测距仪对象所测量的距离

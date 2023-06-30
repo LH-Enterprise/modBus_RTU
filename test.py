@@ -42,3 +42,5 @@ signals = [0, 1, 0, 0, 1]
 status=[0,0,0,0]
 index = signals.index(1)
 print(index)
+
+
