@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-
+################################################该页面与项目无关，调试算法使用###########################################
 def drawScatterPlot(points,left=0,right=1):
     # 提取数据点的横坐标和纵坐标
     x = [d[0] for d in points]
